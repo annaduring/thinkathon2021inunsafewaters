@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# eclipse PyDev
+.project
+.pydevproject
