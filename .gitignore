@@ -131,3 +131,6 @@ dmypy.json
 # eclipse PyDev
 .project
 .pydevproject
+
+# keras
+*.h5
