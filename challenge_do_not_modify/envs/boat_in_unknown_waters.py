@@ -166,10 +166,11 @@ class BoatInUnknownWaters(core.Env):
         self.action_space = spaces.Box(
             low=np.array([0, -rho_max]), 
             high=np.array([m_max, rho_max]), dtype=np.float64)
-        # agent observes the triple [position x, position y, orientation angle]:
+        # agent observes the sixtuple 
+        # [position x, position y, orientation angle phi, dx/dt, dy/dt, dphi/dt]:
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf, -np.inf, -pi]), 
-            high=np.array([-np.inf, -np.inf, -pi]), dtype=np.float64)
+            low=np.array([-np.inf, -np.inf, -pi, -np.inf, -np.inf, -np.inf]), 
+            high=np.array([np.inf, np.inf, pi, np.inf, np.inf, np.inf]), dtype=np.float64)
         self._coeffs = self.state = self.state0 = self.history = self.viewer = None
         self.n_reset_coeffs = self._n_passive_succeeds = self._n_twice_fails = 0
         self.seed()

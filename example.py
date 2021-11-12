@@ -72,7 +72,6 @@ for episode in progressbar(range(n_episodes)):
     while True:
         action = my_strategy(obs)
         obs, reward, terminated, info = res = env.step(action)
-        total += reward
         if terminated: 
             break
     n_success += reward
