@@ -1,6 +1,6 @@
 """main challenge: navigate a boat in unknown waters so that it does not fall of a cliff for as long as possible"""
 import numpy as np
-from numpy import sin, cos, pi
+from numpy import abs, sin, cos, pi
 from scipy.integrate import odeint 
 from numba import njit
 
@@ -10,9 +10,9 @@ from gym.utils import seeding
 
 # PARAMETERS:
 
-rho_max = np.pi/2  # = +- 90°
+rho_max = pi/2  # = +- 90°
 m_max = 5
-t_max = 5
+t_max = 2
 
 radius = 1  # distance between boat's center of gravity and its motor 
 yoff = -1  # offset for y dynamics
@@ -21,28 +21,28 @@ c = 0.1  # dampening coefficient for dynamics
 
 # DYNAMICS:
     
-@njit
+#@njit
 def dxyphi(xyphi, t, parms, action):
     # extract parameters:
-    xoff, a00, a10, a01, a11, a20, a02, b00, b10, b01, b11, b20, b02, a30, a21, a12, a03, b30, b21, b12, b03 = parms
+    a00, a10, a01, a11, a20, a02, b00, b10, b01, b11, b20, b02, a30, a21, a12, a03, b30, b21, b12, b03 = parms
     # extract state:
     x,y,phi = xyphi  
     # extract action:
     m, rho = action
     
     # motor force component parallel to the orientation of the boat moves the boat forward:
-    forward_velocity = m * np.cos(rho)
+    forward_velocity = m * cos(rho)
     # motor force component perpendicular to the orientation of the boat turns the boat:
-    turning_velocity = m * np.sin(rho)
+    turning_velocity = m * sin(rho)
     angular_velocity = turning_velocity / radius
 
     # derivatives:
     y -= yoff
     return [
         a00 + a10*x + a01*y + a11*x*y + a20*x**2 + a02*y**2 + a30*x**3 + a21*x**2*y + a12*x*y**2 + a03*y**3
-            - c*x*(x**2 + y**2)**1.5 + forward_velocity * np.sin(phi),  # dx/dt
+            - c*x*(x**2 + y**2)**1.5 + forward_velocity * sin(phi),  # dx/dt
         b00 + b10*x + b01*y + b11*x*y + b20*x**2 + b02*y**2 + b30*x**3 + b21*x**2*y + b12*x*y**2 + b03*y**3
-            - c*y*(x**2 + y**2)**1.5 + forward_velocity * np.cos(phi),  # dy/dt
+            - c*y*(x**2 + y**2)**1.5 + forward_velocity * cos(phi),  # dy/dt
         angular_velocity  # dphi/dt
         ]
 
@@ -146,13 +146,13 @@ class BoatInUnknownWaters(core.Env):
         self.n_steps = n_steps
         # agent can choose a pair [motor speed, rudder angle]:
         self.action_space = spaces.Box(
-            low=[0, -rho_max], 
-            high=[m_max, rho_max], 
+            low=np.array([0, -rho_max]), 
+            high=np.array([m_max, rho_max]), 
             dtype=np.float32)
         # agent observes the triple [position x, position y, orientation angle]:
         self.observation_space = spaces.Box(
-            low=[-np.inf, -np.inf, -np.pi], 
-            high=[-np.inf, -np.inf, -np.pi], 
+            low=np.array([-np.inf, -np.inf, -pi]), 
+            high=np.array([-np.inf, -np.inf, -pi]), 
             dtype=np.float32)
         self.parms = None
         self.state = None
@@ -167,7 +167,7 @@ class BoatInUnknownWaters(core.Env):
         ts = np.linspace(0, t_max, self.n_steps+1)
         while True:
             # choose random flow field:
-            parms = np.random.normal(size=21)
+            parms = np.random.normal(size=20)
             # choose random initial position and upwards orientation:
             xyphi0 = np.array([6*np.random.uniform()-3, 6*np.random.uniform(), 0])
             # if passive survives, don't use:
@@ -182,15 +182,18 @@ class BoatInUnknownWaters(core.Env):
             break
         self.parms = parms
         self.t = 0
+        # choose random orientation:
+        xyphi0[2] = 2*pi * np.random.uniform()
         self.state = xyphi0.astype(np.float32)
+        self.action = np.array([0, 0])
         return self._get_ob()
 
     def step(self, action):
         assert not self._terminal(), "no steps beyond termination allowed"
         m, rho = action
         assert 0 <= m <= m_max, "m must be betwee 0 and "+m_max
-        assert np.abs(rho) <= rho_max, "abs(rho) can be at most "+rho_max
-        self.action = action
+        assert abs(rho) <= rho_max, "abs(rho) can be at most "+rho_max
+        self.action = np.array(action)
         # integrate dynamics for dt time units:
         dt = t_max / self.n_steps
         new_state = odeint(dxyphi, self.state, [0, dt], (self.parms, self.action))[-1,:]
@@ -212,20 +215,51 @@ class BoatInUnknownWaters(core.Env):
 
     def render(self, mode="human"):
         from gym.envs.classic_control import rendering
+        
         if self.viewer is None:
-            self.viewer = rendering.Viewer(500, 500)
-            self.viewer.set_bounds(-10, 10, 0, 10)
-
+            self.viewer = rendering.Viewer(800, 450)
+            self.viewer.set_bounds(-8, 8, -1, 8)
+            xs = self._xs = np.linspace(-8, 8, 33)
+            ys = self._ys = np.linspace(-1, 8, 19)
+            self._dxys = np.array([[list(dxyphi(np.array([x,y,0]),0,self.parms,[0,0])[:2]) for y in ys] for x in xs])
+            
         if self.state is None:
             return None
+
+        # draw flow field:
+        self.viewer.draw_polygon([[-8,0],[8,0],[8,8],[-8,8]], filled=True).set_color(0.4, 0.7, 0.9)
+        self.viewer.draw_polygon([[-8,0],[8,0],[8,-1],[-8,-1]], filled=True).set_color(1.0, 0.3, 0.3)
+        for i,x in enumerate(self._xs):
+            for j,y in enumerate(self._ys):
+                dxy = self._dxys[i,j,:]
+                dx,dy = dxy / np.sqrt((dxy**2).sum()) / 3
+                self.viewer.draw_polygon([[x+dy/10, y-dx/10], 
+                                          [x-dy/10, y+dx/10], 
+                                          [x+dx, y+dy]], filled=True).set_color(0.3, 0.575, 0.675)
 
         x,y,phi = self.state
         m,rho = self.action
         
+        # draw boat:
+        dx = radius * sin(phi)
+        dy = radius * cos(phi)
+        b = self.viewer.draw_polygon([[x+dy/5, y-dx/5], [x-dx, y-dy], [x-dy/5, y+dx/5], [x+dx, y+dy]])
+#        b.add_attr(rendering.LineWidth(stroke=0.1))  # does not seem to have any effect
+        b.set_color(0, 0, 0)
         # draw boat's center of gravity:
-        c = self.viewer.draw_circle(radius=10)
-        c.add_attr(rendering.Transform(translation=(x,y)))
+        c = self.viewer.draw_circle(radius=0.15)
+        c.add_attr(rendering.Transform(translation=(x, y)))
         c.set_color(1, 1, 1)
+        c = self.viewer.draw_circle(radius=0.05)
+        c.add_attr(rendering.Transform(translation=(x-dx, y-dy)))
+        c.set_color(0, 0, 0)
+        motorlen = radius / 2
+        dx2 = motorlen * sin(phi-rho)
+        dy2 = motorlen * cos(phi-rho)
+        # draw motor:
+        mo = self.viewer.draw_polygon([[x-dx-dx2/2+dy2/3, y-dy-dy2/2-dx2/3], [x-dx-dx2/2-dy2/3, y-dy-dy2/2+dx2/3], [x-dx+dx2/2, y-dy+dy2/2]])
+#        mo.add_attr(rendering.LineWidth(stroke=0.2))  # does not seem to have any effect
+        mo.set_color(1, 1, 0)
 
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 
