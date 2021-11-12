@@ -151,7 +151,8 @@ class BoatInUnknownWaters(core.Env):
     """
 
     metadata = {
-        "render.modes": ["human"] #, "video.frames_per_second": 15
+        "render.modes": ["human", "rgb_array"], 
+        "video.frames_per_second": 5
     }
 
     def get_parameters(self):
@@ -171,11 +172,13 @@ class BoatInUnknownWaters(core.Env):
         self.observation_space = spaces.Box(
             low=np.array([-np.inf, -np.inf, -pi, -np.inf, -np.inf, -np.inf]), 
             high=np.array([np.inf, np.inf, pi, np.inf, np.inf, np.inf]), dtype=np.float64)
-        self._coeffs = self.state = self.state0 = self.history = self.viewer = None
+        self._coeffs = np.zeros(21)
+        self.state = self.state0 = self.history = self.viewer = None
         self.n_reset_coeffs = self._n_passive_succeeds = self._n_twice_fails = 0
         self.seed()
 
     def seed(self, seed=None):
+        self._seed = seed
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 

@@ -2,6 +2,7 @@ import numpy as np
 from time import time, sleep
 from progressbar import progressbar
 
+from gym.wrappers import RecordVideo
 from challenge_do_not_modify import BoatInUnknownWaters
 
 # initialize environment:
@@ -47,26 +48,33 @@ def go_center(obs):
 my_strategy = go_north
 #my_strategy = go_center
 
-# run one episode:
-print("\nRUNNING ONE EPISODE...")
-obs = env.reset()
+
+print("\nVIDEO RECORDING ONE EPISODE...")
+# prepare video recording:
+recording_env = RecordVideo(env, 
+                            video_folder="/tmp/boat_videos", 
+                            name_prefix='video_'+env.boundary+'_'+str(env._seed))
+# first reset the environment, then (!) start the recorder:
+obs = recording_env.reset()
+recording_env.start_video_recorder()
 total = 0
 while True:
     # choose next action by applying strategy to last observation:
     action = my_strategy(obs) 
     # let environment run for one step and get new observation and reward:
-    obs, reward, terminated, info = res = env.step(action)
+    obs, reward, terminated, info = res = recording_env.step(action)
     total += reward
-    # show state to user:
-    env.render()
     sleep(0.1)
     # check whether episode ended:
     if terminated: 
         break
+recording_env.close_video_recorder()
+
 
 print('started with', env.history[0])
 print('ended with', env.history[-1])
 print('total reward:', total)
+
 
 # now run many times without rendering to assess the strategy's performance:
 n_episodes = 100

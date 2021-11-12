@@ -212,7 +212,7 @@ def policy(state, noise_object):
     return np.squeeze(legal_action)  # JH: removed square brackets
 
 
-std_dev = 0.1  # JH: changed from 0.2
+std_dev = 0.4  # JH: changed from 0.2
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = get_actor()
