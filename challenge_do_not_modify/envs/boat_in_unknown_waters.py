@@ -21,7 +21,7 @@ c = 0.1  # dampening coefficient for dynamics
 
 # DYNAMICS:
     
-#@njit
+@njit
 def dxyphi(xyphi, t, parms, action):
     # extract parameters:
     a00, a10, a01, a11, a20, a02, b00, b10, b01, b11, b20, b02, a30, a21, a12, a03, b30, b21, b12, b03 = parms
@@ -171,11 +171,11 @@ class BoatInUnknownWaters(core.Env):
             # choose random initial position and upwards orientation:
             xyphi0 = np.array([6*np.random.uniform()-3, 6*np.random.uniform(), 0])
             # if passive survives, don't use:
-            traj = odeint(dxyphi, xyphi0, ts, args=(parms, [0, 0]))
+            traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.zeros(2)))
             if np.all(traj[:,1] > 0): 
                 continue
             # if moving upwards with twice the maximal speed does not survive, don't use either:
-            traj = odeint(dxyphi, xyphi0, ts, args=(parms, [2*m_max, 0]))
+            traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.array([2*m_max, 0])))
             if not np.all(traj[:,1] > 0): 
                 continue
             # otherwise use these parms:
@@ -221,7 +221,7 @@ class BoatInUnknownWaters(core.Env):
             self.viewer.set_bounds(-8, 8, -1, 8)
             xs = self._xs = np.linspace(-8, 8, 33)
             ys = self._ys = np.linspace(-1, 8, 19)
-            self._dxys = np.array([[list(dxyphi(np.array([x,y,0]),0,self.parms,[0,0])[:2]) for y in ys] for x in xs])
+            self._dxys = np.array([[list(dxyphi(np.array([x,y,0]),0,self.parms,np.zeros(2))[:2]) for y in ys] for x in xs])
             
         if self.state is None:
             return None
