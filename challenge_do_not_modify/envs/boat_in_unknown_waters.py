@@ -191,8 +191,8 @@ class BoatInUnknownWaters(core.Env):
     def step(self, action):
         assert not self._terminal(), "no steps beyond termination allowed"
         m, rho = action
-        assert 0 <= m <= m_max, "m must be betwee 0 and "+m_max
-        assert abs(rho) <= rho_max, "abs(rho) can be at most "+rho_max
+        assert 0 <= m <= m_max, "m must be between 0 and "+str(m_max)
+        assert abs(rho) <= rho_max, "abs(rho) can be at most "+str(rho_max)
         self.action = np.array(action)
         # integrate dynamics for dt time units:
         dt = t_max / self.n_steps

@@ -11,7 +11,7 @@ print("parameters:", parms)
 # a simple strategy:
 def simple_strategy(obs):
     # turn boat until facing rather "up" than "down", 
-    # then being pushing forward and turn it further until facing straight "up"
+    # then begin pushing forward and turn it further until facing straight "up"
     x, y, phi, dx_dt, dy_dt, dphi_dt = obs
     m = parms['m_max']
     rho = -np.sign(np.sin(phi)) * parms['rho_max'] * (np.abs(np.sin(phi)) if np.cos(phi) > 0 else 1)
