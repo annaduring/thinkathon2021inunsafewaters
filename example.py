@@ -36,8 +36,8 @@ def go_center(obs):
     return [m, rho]
     
 # CHOOSE ONE:
-my_strategy = random_action
-#my_strategy = go_north
+#my_strategy = random_action
+my_strategy = go_north
 #my_strategy = go_center
 
 # run one episode:

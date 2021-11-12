@@ -202,7 +202,7 @@ class BoatInUnknownWaters(core.Env):
                         if x**2 + y**2 > initial_radius**2:
                             continue
                         break
-                    xyphi0 = np.array([x, y, 2*pi * np.random.uniform()])
+                    xyphi0 = np.array([x, y, 0])
                 if self.boundary == 'line':
                     # if passive survives, don't use:
                     traj = odeint(dxyphi, xyphi0, ts, args=(coeffs, np.zeros(2)))
@@ -226,8 +226,8 @@ class BoatInUnknownWaters(core.Env):
                     if not np.all(traj[:,0]**2 + traj[:,1]**2 < boundary_radius**2):
                         self._n_twice_fails += 1
                         continue
-                    
-                # otherwise use these coeffs:
+                # otherwise use these coeffs and initial condition
+                xyphi0[2] = 2*pi * np.random.uniform()                    
                 break
             self._coeffs = coeffs
             self.state0 = xyphi0
