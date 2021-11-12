@@ -15,19 +15,28 @@ m_max = 5
 t_max = 2
 
 radius = 1  # distance between boat's center of gravity and its motor 
-yoff = -1  # offset for y dynamics
 c = 0.1  # dampening coefficient for dynamics
+
+# if boundary == line:
+yoff_line = -1  # offset for y dynamics
+
+# if boundary == circle:
+yoff_circle = -1  # offset for y dynamics
+boundary_radius = 4  # radius of safe region 
+initial_radius = 3  # range of initial positions 
 
 
 # DYNAMICS:
     
 @njit
-def dxyphi(xyphi, t, parms, action):
+def dxyphi(xyphi, t, coeffs, action, strategy=None):
     # extract parameters:
-    a00, a10, a01, a11, a20, a02, b00, b10, b01, b11, b20, b02, a30, a21, a12, a03, b30, b21, b12, b03 = parms
+    yoff, a00, a10, a01, a11, a20, a02, b00, b10, b01, b11, b20, b02, a30, a21, a12, a03, b30, b21, b12, b03 = coeffs
     # extract state:
     x,y,phi = xyphi  
     # extract action:
+    if strategy is not None:
+        action = strategy(xyphi)
     m, rho = action
     
     # motor force component parallel to the orientation of the boat moves the boat forward:
@@ -46,6 +55,13 @@ def dxyphi(xyphi, t, parms, action):
         angular_velocity  # dphi/dt
         ]
 
+@njit
+def go_center_twice(xyphi0):
+    x,y,phi = xyphi0
+    target_phi = np.arctan2(x,y) + np.pi
+    m = 2*m_max
+    rho = -np.sign(np.sin(phi-target_phi)) * rho_max * (np.abs(np.sin(phi-target_phi)) if np.cos(phi-target_phi) > 0 else 1)
+    return np.array([m, rho])
 
 class BoatInUnknownWaters(core.Env):
     """
@@ -140,10 +156,11 @@ class BoatInUnknownWaters(core.Env):
     def get_parameters(self):
         return { 'm_max': m_max, 'rho_max': rho_max, 't_max': t_max }
         
-    def __init__(self, n_steps=1000):
+    def __init__(self, n_steps=1000, boundary='line'):
         assert n_steps > 0, "n_steps must be at least 1"
-        self.viewer = None
+        assert boundary in ['line', 'circle']
         self.n_steps = n_steps
+        self.boundary = boundary
         # agent can choose a pair [motor speed, rudder angle]:
         self.action_space = spaces.Box(
             low=np.array([0, -rho_max]), 
@@ -152,7 +169,8 @@ class BoatInUnknownWaters(core.Env):
         self.observation_space = spaces.Box(
             low=np.array([-np.inf, -np.inf, -pi]), 
             high=np.array([-np.inf, -np.inf, -pi]), dtype=np.float64)
-        self.parms = self.state = self.state0 = self.history = None
+        self._coeffs = self.state = self.state0 = self.history = self.viewer = None
+        self.n_reset_coeffs = self._n_passive_succeeds = self._n_twice_fails = 0
         self.seed()
 
     def seed(self, seed=None):
@@ -170,27 +188,53 @@ class BoatInUnknownWaters(core.Env):
             ts = np.linspace(0, t_max, self.n_steps+1)
             while True:
                 # choose random flow field:
-                parms = np.random.normal(size=20)
-                # choose random initial position and upwards orientation:
-                xyphi0 = np.array([6*np.random.uniform()-3, 6*np.random.uniform(), 0])
-                # if passive survives, don't use:
-                traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.zeros(2)))
-                if np.all(traj[:,1] > 0): 
-                    continue
-                # if moving upwards with twice the maximal speed does not survive, don't use either:
-                traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.array([2*m_max, 0])))
-                if not np.all(traj[:,1] > 0): 
-                    continue
-                # otherwise use these parms:
+                coeffs = np.random.normal(size=21)
+                if self.boundary == 'line':
+                    coeffs[0] = yoff_line
+                    # choose random initial position and upwards orientation:
+                    xyphi0 = np.array([6*np.random.uniform()-3, 6*np.random.uniform(), 0])
+                elif self.boundary == 'circle':
+                    coeffs[0] = yoff_circle
+                    # choose random initial position and orientation:
+                    while True:
+                        x, y = initial_radius * np.random.uniform(-1,1,size=2)
+                        if x**2 + y**2 > initial_radius**2:
+                            continue
+                        break
+                    xyphi0 = np.array([x, y, 2*pi * np.random.uniform()])
+                if self.boundary == 'line':
+                    # if passive survives, don't use:
+                    traj = odeint(dxyphi, xyphi0, ts, args=(coeffs, np.zeros(2)))
+                    if np.all(traj[:,1] > 0):
+                        self._n_passive_succeeds += 1
+                        continue
+                    # if moving upwards with twice the maximal speed does not survive, don't use either:
+                    traj = odeint(dxyphi, np.concatenate((xyphi0[:2],[0])), ts, args=(coeffs, np.array([2*m_max, 0])))
+                    if not np.all(traj[:,1] > 0): 
+                        self._n_twice_fails += 1
+                        continue
+                elif self.boundary == 'circle':
+                    # if passive survives, don't use:
+                    traj = odeint(dxyphi, xyphi0, ts, args=(coeffs, np.zeros(2)))
+                    if np.all(traj[:,0]**2 + traj[:,1]**2 < boundary_radius**2):
+                        self._n_passive_succeeds += 1
+                        continue
+                    # if moving towards center with twice the maximal speed does not survive, don't use either:
+                    x,y,phi = xyphi0
+                    traj = odeint(dxyphi, xyphi0, ts, args=(coeffs, np.zeros(2), go_center_twice))
+                    if not np.all(traj[:,0]**2 + traj[:,1]**2 < boundary_radius**2):
+                        self._n_twice_fails += 1
+                        continue
+                    
+                # otherwise use these coeffs:
                 break
-            self.parms = parms
-            # choose random orientation:
-            xyphi0[2] = 2*pi * np.random.uniform()
+            self._coeffs = coeffs
             self.state0 = xyphi0
+            self.n_reset_coeffs += 1
         self.history = []
         self.t = 0
         self.state = self.state0
-        self.action = np.array([0, 0])
+        self.action = np.zeros(2)
         self.reward = 0
         self.terminal = False
         self._make_obs()
@@ -205,12 +249,11 @@ class BoatInUnknownWaters(core.Env):
         self.action = np.array(action)
         # integrate dynamics for dt time units:
         dt = t_max / self.n_steps
-        new_state = odeint(dxyphi, self.state, [0, dt], (self.parms, self.action))[-1,:]
+        new_state = odeint(dxyphi, self.state, [0, dt], (self._coeffs, self.action))[-1,:]
         new_state[2] = wrap(new_state[2], -pi, pi)
         self.t += dt
         x,y,phi = self.state = new_state
-        self.terminal = bool((y <= 0) or (self.t >= t_max))
-        self.reward = 1.0 if self.terminal and (y > 0) else 0.0
+        self._make_reward()
         self._make_obs()
         self._remember()
         return (self.obs, self.reward, self.terminal, {})
@@ -220,17 +263,27 @@ class BoatInUnknownWaters(core.Env):
         
         if self.viewer is None:
             self.viewer = rendering.Viewer(800, 450)
-            self.viewer.set_bounds(-8, 8, -1, 8)
-            xs = self._xs = np.linspace(-8, 8, 33)
-            ys = self._ys = np.linspace(-1, 8, 19)
-            self._dxys = np.array([[list(dxyphi(np.array([x,y,0]),0,self.parms,np.zeros(2))[:2]) for y in ys] for x in xs])
+            if self.boundary == 'line':
+                self.viewer.set_bounds(-8, 8, -1, 8)
+                xs = self._xs = np.linspace(-8, 8, 33)
+                ys = self._ys = np.linspace(-1, 8, 19)
+            elif self.boundary == 'circle':
+                self.viewer.set_bounds(-8, 8, -4.5, 4.5)
+                xs = self._xs = np.linspace(-8, 8, 33)
+                ys = self._ys = np.linspace(-4, 4, 16)
+            self._dxys = np.array([[list(dxyphi(np.array([x,y,0]),0,self._coeffs,np.zeros(2))[:2]) for y in ys] for x in xs])
             
         if self.state is None:
             return None
 
         # draw flow field:
-        self.viewer.draw_polygon([[-8,0],[8,0],[8,8],[-8,8]], filled=True).set_color(0.4, 0.7, 0.9)
-        self.viewer.draw_polygon([[-8,0],[8,0],[8,-1],[-8,-1]], filled=True).set_color(1.0, 0.3, 0.3)
+        if self.boundary == 'line':
+            self.viewer.draw_polygon([[-8,0],[8,0],[8,8],[-8,8]], filled=True).set_color(0.4, 0.7, 0.9)
+            self.viewer.draw_polygon([[-8,0],[8,0],[8,-1],[-8,-1]], filled=True).set_color(1.0, 0.3, 0.3)
+        elif self.boundary == 'circle':
+            self.viewer.draw_polygon([[-8,-4.5],[8,-4.5],[8,4.5],[-8,4.5]], filled=True).set_color(1.0, 0.3, 0.3)
+            c = self.viewer.draw_circle(radius=boundary_radius)
+            c.set_color(0.4, 0.7, 0.9)
         for i,x in enumerate(self._xs):
             for j,y in enumerate(self._ys):
                 dxy = self._dxys[i,j,:]
@@ -258,10 +311,10 @@ class BoatInUnknownWaters(core.Env):
         c = self.viewer.draw_circle(radius=0.05)
         c.add_attr(rendering.Transform(translation=(x-dx, y-dy)))
         c.set_color(0, 0, 0)
-        motorlen = radius / 2
+        # draw motor:
+        motorlen = m/m_max * radius/2
         dx2 = motorlen * sin(phi-rho)
         dy2 = motorlen * cos(phi-rho)
-        # draw motor:
         mo = self.viewer.draw_polygon([[x-dx-dx2/2+dy2/3, y-dy-dy2/2-dx2/3], 
                                        [x-dx-dx2/2-dy2/3, y-dy-dy2/2+dx2/3], 
                                        [x-dx+dx2/2, y-dy+dy2/2]])
@@ -275,9 +328,18 @@ class BoatInUnknownWaters(core.Env):
             self.viewer.close()
             self.viewer = None
 
+    def _make_reward(self):
+        x,y,phi = self.state
+        if self.boundary == 'line':
+            died = (y <= 0)
+        elif self.boundary == 'circle':
+            died = (x**2 + y**2 >= boundary_radius**2)
+        self.terminal = (died or (self.t >= t_max))
+        self.reward = 1.0 if self.terminal and not died else 0.0
+        
     def _make_obs(self):
         # agents can observe the full state and its time derivative, but not the parameters:
-        self.obs = np.concatenate((self.state, dxyphi(self.state, self.t, self.parms, self.action)))
+        self.obs = np.concatenate((self.state, dxyphi(self.state, self.t, self._coeffs, self.action)))
 
     def _remember(self):
         self.history.append({
