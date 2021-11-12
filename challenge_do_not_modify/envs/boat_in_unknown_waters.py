@@ -57,6 +57,7 @@ def dxyphi(xyphi, t, coeffs, action, strategy=None):
 
 @njit
 def go_center_twice(xyphi0):
+    # utopian strategy used in selection of scenarios only
     x,y,phi = xyphi0
     target_phi = np.arctan2(x,y) + np.pi
     m = 2*m_max

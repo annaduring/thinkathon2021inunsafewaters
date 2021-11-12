@@ -1,13 +1,14 @@
 import numpy as np
 from time import time, sleep
+from progressbar import progressbar
 
 from challenge_do_not_modify import BoatInUnknownWaters
 
 # initialize environment:
 
 # CHOOSE ONE:
-#env = BoatInUnknownWaters(n_steps=100, boundary='line')
-env = BoatInUnknownWaters(n_steps=100, boundary='circle')
+env = BoatInUnknownWaters(n_steps=100, boundary='line')
+#env = BoatInUnknownWaters(n_steps=100, boundary='circle')
 
 parms = env.get_parameters()
 print("parameters:", parms)
@@ -35,9 +36,9 @@ def go_center(obs):
     return [m, rho]
     
 # CHOOSE ONE:
-#my_strategy = random_action
+my_strategy = random_action
 #my_strategy = go_north
-my_strategy = go_center
+#my_strategy = go_center
 
 # run one episode:
 print("\nRUNNING ONE EPISODE...")
@@ -61,12 +62,12 @@ print('ended with', env.history[-1])
 print('total reward:', total)
 
 # now run many times without rendering to assess the strategy's performance:
-n_episodes = 1000
+n_episodes = 100
 print("\nRUNNING", n_episodes, "EPISODES...")
 start_time = time()
 
 n_success = 0
-for episode in range(n_episodes):
+for episode in progressbar(range(n_episodes)):
     obs = env.reset()
     while True:
         action = my_strategy(obs)
@@ -78,9 +79,6 @@ for episode in range(n_episodes):
 rate = n_success / n_episodes
 print("took", (time()-start_time)/n_episodes, "seconds per episode")
 print("success rate", rate, "+-", np.sqrt(rate*(1-rate)/n_episodes))
-
-print("passive succeeds rate", env._n_passive_succeeds/env.n_reset_coeffs)
-print("twice fails rate", env._n_twice_fails/env.n_reset_coeffs)
 
 sleep(10)
 exit()
