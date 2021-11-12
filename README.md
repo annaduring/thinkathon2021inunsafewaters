@@ -1,3 +1,8 @@
 # thinkathlon2021navigate
 
-to get started, look at example.py and keras_ddpg.py
+To get started, look at:
+
+1. the videos folder
+2. example.py
+3. challenge_do_not_modify/envs/boat_in_unknown_waters.py
+4. keras_ddpg.py
