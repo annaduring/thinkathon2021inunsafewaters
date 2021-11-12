@@ -1,5 +1,5 @@
 import numpy as np
-from time import sleep
+from time import time, sleep
 
 from challenge_do_not_modify import BoatInUnknownWaters
 
@@ -18,6 +18,7 @@ def simple_strategy(obs):
     return [m, rho]
 
 # run one episode:
+print("\nRUNNING ONE EPISODE...")
 obs = env.reset()
 total = 0
 while True:
@@ -33,5 +34,28 @@ while True:
     if terminated: 
         break
 
+print('started with', env.history[0])
+print('ended with', env.history[-1])
 print('total reward:', total)
+
+# now run many times without rendering to assess the strategy's performance:
+n_episodes = 1000
+print("\nRUNNING", n_episodes, "EPISODES...")
+start_time = time()
+
+n_success = 0
+for episode in range(n_episodes):
+    obs = env.reset()
+    while True:
+        action = simple_strategy(obs)
+        obs, reward, terminated, info = res = env.step(action)
+        total += reward
+        if terminated: 
+            break
+    n_success += reward
+rate = n_success / n_episodes
+print("took", (time()-start_time)/n_episodes, "seconds per episode")
+print("success rate", rate, "+-", np.sqrt(rate*(1-rate)/n_episodes))
+
 sleep(10)
+exit()

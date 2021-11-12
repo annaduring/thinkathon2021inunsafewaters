@@ -147,49 +147,58 @@ class BoatInUnknownWaters(core.Env):
         # agent can choose a pair [motor speed, rudder angle]:
         self.action_space = spaces.Box(
             low=np.array([0, -rho_max]), 
-            high=np.array([m_max, rho_max]), 
-            dtype=np.float32)
+            high=np.array([m_max, rho_max]), dtype=np.float64)
         # agent observes the triple [position x, position y, orientation angle]:
         self.observation_space = spaces.Box(
             low=np.array([-np.inf, -np.inf, -pi]), 
-            high=np.array([-np.inf, -np.inf, -pi]), 
-            dtype=np.float32)
-        self.parms = None
-        self.state = None
+            high=np.array([-np.inf, -np.inf, -pi]), dtype=np.float64)
+        self.parms = self.state = self.state0 = self.history = None
         self.seed()
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def reset(self):
-        # find a random scenario that is neither trivial nor too hard:
-        ts = np.linspace(0, t_max, self.n_steps+1)
-        while True:
-            # choose random flow field:
-            parms = np.random.normal(size=20)
-            # choose random initial position and upwards orientation:
-            xyphi0 = np.array([6*np.random.uniform()-3, 6*np.random.uniform(), 0])
-            # if passive survives, don't use:
-            traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.zeros(2)))
-            if np.all(traj[:,1] > 0): 
-                continue
-            # if moving upwards with twice the maximal speed does not survive, don't use either:
-            traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.array([2*m_max, 0])))
-            if not np.all(traj[:,1] > 0): 
-                continue
-            # otherwise use these parms:
-            break
-        self.parms = parms
+    def reset(self, same=False):
+        """
+        If same=True, reuse the same scenario. This may be useful in the initial
+        phase of the training process. For the final evaluation, the default
+        of same=False must be used.
+        """
+        if not same:
+            # find a random scenario that is neither trivial nor too hard:
+            ts = np.linspace(0, t_max, self.n_steps+1)
+            while True:
+                # choose random flow field:
+                parms = np.random.normal(size=20)
+                # choose random initial position and upwards orientation:
+                xyphi0 = np.array([6*np.random.uniform()-3, 6*np.random.uniform(), 0])
+                # if passive survives, don't use:
+                traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.zeros(2)))
+                if np.all(traj[:,1] > 0): 
+                    continue
+                # if moving upwards with twice the maximal speed does not survive, don't use either:
+                traj = odeint(dxyphi, xyphi0, ts, args=(parms, np.array([2*m_max, 0])))
+                if not np.all(traj[:,1] > 0): 
+                    continue
+                # otherwise use these parms:
+                break
+            self.parms = parms
+            # choose random orientation:
+            xyphi0[2] = 2*pi * np.random.uniform()
+            self.state0 = xyphi0
+        self.history = []
         self.t = 0
-        # choose random orientation:
-        xyphi0[2] = 2*pi * np.random.uniform()
-        self.state = xyphi0.astype(np.float32)
+        self.state = self.state0
         self.action = np.array([0, 0])
-        return self._get_ob()
+        self.reward = 0
+        self.terminal = False
+        self._make_obs()
+        self._remember()
+        return self.obs
 
     def step(self, action):
-        assert not self._terminal(), "no steps beyond termination allowed"
+        assert not self.terminal, "no steps beyond termination allowed"
         m, rho = action
         assert 0 <= m <= m_max, "m must be between 0 and "+str(m_max)
         assert abs(rho) <= rho_max, "abs(rho) can be at most "+str(rho_max)
@@ -200,18 +209,11 @@ class BoatInUnknownWaters(core.Env):
         new_state[2] = wrap(new_state[2], -pi, pi)
         self.t += dt
         x,y,phi = self.state = new_state
-        terminal = self._terminal()
-        reward = 1.0 if terminal and (y > 0) else 0.0
-        return (self._get_ob(), reward, terminal, {})
-
-    def _get_ob(self):
-        # agents can observe the full state and its time derivative, but not the parameters:
-        ob = np.concatenate((self.state, dxyphi(self.state, self.t, self.parms, self.action)))
-        return ob
-
-    def _terminal(self):
-        x,y,phi = self.state
-        return bool((y <= 0) or (self.t >= t_max))
+        self.terminal = bool((y <= 0) or (self.t >= t_max))
+        self.reward = 1.0 if self.terminal and (y > 0) else 0.0
+        self._make_obs()
+        self._remember()
+        return (self.obs, self.reward, self.terminal, {})
 
     def render(self, mode="human"):
         from gym.envs.classic_control import rendering
@@ -243,7 +245,10 @@ class BoatInUnknownWaters(core.Env):
         # draw boat:
         dx = radius * sin(phi)
         dy = radius * cos(phi)
-        b = self.viewer.draw_polygon([[x+dy/5, y-dx/5], [x-dx, y-dy], [x-dy/5, y+dx/5], [x+dx, y+dy]])
+        b = self.viewer.draw_polygon([[x+dy/5, y-dx/5], 
+                                      [x-dx, y-dy], 
+                                      [x-dy/5, y+dx/5], 
+                                      [x+dx, y+dy]])
 #        b.add_attr(rendering.LineWidth(stroke=0.1))  # does not seem to have any effect
         b.set_color(0, 0, 0)
         # draw boat's center of gravity:
@@ -257,7 +262,9 @@ class BoatInUnknownWaters(core.Env):
         dx2 = motorlen * sin(phi-rho)
         dy2 = motorlen * cos(phi-rho)
         # draw motor:
-        mo = self.viewer.draw_polygon([[x-dx-dx2/2+dy2/3, y-dy-dy2/2-dx2/3], [x-dx-dx2/2-dy2/3, y-dy-dy2/2+dx2/3], [x-dx+dx2/2, y-dy+dy2/2]])
+        mo = self.viewer.draw_polygon([[x-dx-dx2/2+dy2/3, y-dy-dy2/2-dx2/3], 
+                                       [x-dx-dx2/2-dy2/3, y-dy-dy2/2+dx2/3], 
+                                       [x-dx+dx2/2, y-dy+dy2/2]])
 #        mo.add_attr(rendering.LineWidth(stroke=0.2))  # does not seem to have any effect
         mo.set_color(1, 1, 0)
 
@@ -268,6 +275,20 @@ class BoatInUnknownWaters(core.Env):
             self.viewer.close()
             self.viewer = None
 
+    def _make_obs(self):
+        # agents can observe the full state and its time derivative, but not the parameters:
+        self.obs = np.concatenate((self.state, dxyphi(self.state, self.t, self.parms, self.action)))
+
+    def _remember(self):
+        self.history.append({
+            't': self.t, 
+            'state': self.state, 
+            'action': self.action, 
+            'reward': self.reward,
+            'terminal': self.terminal,
+            'obs': self.obs
+            })
+        
 
 # aux func.:
     
