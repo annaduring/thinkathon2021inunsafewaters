@@ -14,11 +14,21 @@ import matplotlib.pyplot as plt
     
 from challenge_do_not_modify import BoatInUnknownWaters
 problem = "BoatInUnknownWaters"
-env = BoatInUnknownWaters(n_steps=100)
+env = BoatInUnknownWaters(n_steps=100, boundary="line")
 
-# choose whether to use actual reward or use survival time instead: 
-#use_survival_time_as_reward = False
-use_survival_time_as_reward = True
+# CHOOSE A RANDOM SEED:
+#   interesting cases in (rough subjective) order of ascending difficulty: 
+#     for boundary=line: 7, 12, 37, 35, 23, 32
+#     for boundary=circle: 39, 21, 37, 10, 38, 20
+env.seed(7)
+
+# choose whether to reuse same scenario (must be False in final evaluation!): 
+reuse_scenario = True
+
+# choose whether to use actual reward or use survival time instead (must be False in final evaluation!): 
+#reward_function = 'real'
+reward_function = 'survival time'
+#reward_function = 'squared time'
 
 ###
 
@@ -161,8 +171,7 @@ def get_actor():
     out = layers.Dense(256, activation="relu")(out)
     outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)  # JH: replaced 1 by num_actions
 
-    # Our upper bound is 2.0 for Pendulum.
-    outputs = outputs * upper_bound
+    outputs = lower_bound + (outputs+1)/2 * (upper_bound-lower_bound)  # JH: fixed bounds!
     model = tf.keras.Model(inputs, outputs)
     return model
 
@@ -203,7 +212,7 @@ def policy(state, noise_object):
     return np.squeeze(legal_action)  # JH: removed square brackets
 
 
-std_dev = 0.2
+std_dev = 0.1  # JH: changed from 0.2
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = get_actor()
@@ -240,9 +249,10 @@ avg_reward_list = []
 # Takes about 4 min to train
 for ep in range(total_episodes):
 
-    prev_state = env.reset()
+    prev_state = env.reset(same=reuse_scenario)
     episodic_reward = 0
 
+    step = 0
     while True:
         # Uncomment this to see the Actor in action
         # But not in a python notebook.
@@ -255,8 +265,15 @@ for ep in range(total_episodes):
         state, reward, done, info = env.step(action)
         
         # JH: optionally use an auxiliary reward function instead:
-        if use_survival_time_as_reward:
+        if reward_function == 'real':
+            pass  # use the real rewards
+        elif reward_function == 'survival time':
             reward = 1.0 if not done else 0.0
+        elif reward_function == 'squared time':
+            reward = 1.0*step if not done else 0.0
+            step += 1
+        else:
+            raise Exception('unknown reward function')
 
         buffer.record((prev_state, action, reward, state))
         episodic_reward += reward
@@ -285,16 +302,15 @@ plt.xlabel("Episode")
 plt.ylabel("Avg. Epsiodic Reward")
 plt.show()
 
-
 # Save the weights
-actor_model.save_weights("pendulum_actor.h5")
-critic_model.save_weights("pendulum_critic.h5")
+actor_model.save_weights("/tmp/actor.h5")
+critic_model.save_weights("/tmp/critic.h5")
 
-target_actor.save_weights("pendulum_target_actor.h5")
-target_critic.save_weights("pendulum_target_critic.h5")
+target_actor.save_weights("/tmp/target_actor.h5")
+target_critic.save_weights("/tmp/target_critic.h5")
 
 
-# finally evaluate trained actor on actual reward function and show one run:
+# JH: finally evaluate trained actor on actual reward function and show one run:
 # (code similar to example.py):
     
 from time import sleep
@@ -305,8 +321,9 @@ no_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(0.0) * np.ones(1)
 
 n_success = 0
 for episode in progressbar(range(n_episodes)):
-    obs = env.reset()
+    obs = env.reset(same=reuse_scenario)
     while True:
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
         action = policy(tf_prev_state, no_noise)
         obs, reward, terminated, info = res = env.step(action)
         if terminated: 
@@ -315,9 +332,11 @@ for episode in progressbar(range(n_episodes)):
 rate = n_success / n_episodes
 print("success rate", rate, "+-", np.sqrt(rate*(1-rate)/n_episodes))
 
-obs = env.reset()
+obs = env.reset(same=reuse_scenario)
 while True:
+    tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
     action = policy(tf_prev_state, no_noise)
+    print(action)
     obs, reward, terminated, info = res = env.step(action)
     env.render()
     sleep(0.1)

@@ -12,7 +12,7 @@ from gym.utils import seeding
 
 rho_max = pi/2  # = +- 90°
 m_max = 5
-t_max = 2
+t_max = 3
 
 radius = 1  # distance between boat's center of gravity and its motor 
 c = 0.1  # dampening coefficient for dynamics
@@ -185,21 +185,21 @@ class BoatInUnknownWaters(core.Env):
         phase of the training process. For the final evaluation, the default
         of same=False must be used.
         """
-        if not same:
+        if (not same) or (self._coeffs is None):
             # find a random scenario that is neither trivial nor too hard:
             ts = np.linspace(0, t_max, self.n_steps+1)
             while True:
                 # choose random flow field:
-                coeffs = np.random.normal(size=21)
+                coeffs = self.np_random.normal(size=21)
                 if self.boundary == 'line':
                     coeffs[0] = yoff_line
                     # choose random initial position and upwards orientation:
-                    xyphi0 = np.array([6*np.random.uniform()-3, 6*np.random.uniform(), 0])
+                    xyphi0 = np.array([6*self.np_random.uniform()-3, 6*self.np_random.uniform(), 0])
                 elif self.boundary == 'circle':
                     coeffs[0] = yoff_circle
                     # choose random initial position and orientation:
                     while True:
-                        x, y = initial_radius * np.random.uniform(-1,1,size=2)
+                        x, y = initial_radius * self.np_random.uniform(-1,1,size=2)
                         if x**2 + y**2 > initial_radius**2:
                             continue
                         break
@@ -228,7 +228,7 @@ class BoatInUnknownWaters(core.Env):
                         self._n_twice_fails += 1
                         continue
                 # otherwise use these coeffs and initial condition
-                xyphi0[2] = 2*pi * np.random.uniform()                    
+                xyphi0[2] = 2*pi * self.np_random.uniform()                    
                 break
             self._coeffs = coeffs
             self.state0 = xyphi0

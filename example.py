@@ -6,9 +6,15 @@ from challenge_do_not_modify import BoatInUnknownWaters
 
 # initialize environment:
 
-# CHOOSE ONE:
-env = BoatInUnknownWaters(n_steps=100, boundary='line')
-#env = BoatInUnknownWaters(n_steps=100, boundary='circle')
+# CHOOSE A BOUNDARY GEOMETRY:
+env = BoatInUnknownWaters(n_steps=100, boundary='line')  # simpler
+#env = BoatInUnknownWaters(n_steps=100, boundary='circle')  # harder
+
+# CHOOSE A RANDOM SEED:
+#   interesting cases in (rough subjective) order of ascending difficulty: 
+#     for boundary=line: 7, 12, 37, 35, 23, 32
+#     for boundary=circle: 39, 21, 37, 10, 38, 20
+env.seed(7)
 
 parms = env.get_parameters()
 print("parameters:", parms)
@@ -16,8 +22,9 @@ print("parameters:", parms)
 
 # some simple strategies:
 def random_action(obs):
-    m = np.random.uniform(0, parms['m_max'])
-    rho = np.random.uniform(-parms['rho_max'], parms['rho_max'])
+    # choose random motor speed and rudder angle
+    m = env.np_random.uniform(0, parms['m_max'])
+    rho = env.np_random.uniform(-parms['rho_max'], parms['rho_max'])
     return [m, rho]   
 def go_north(obs):
     # turn boat until facing rather "up" (=north) than "down" (south), 
@@ -35,7 +42,7 @@ def go_center(obs):
     rho = -np.sign(np.sin(phi-target_phi)) * parms['rho_max'] * (np.abs(np.sin(phi-target_phi)) if np.cos(phi-target_phi) > 0 else 1)
     return [m, rho]
     
-# CHOOSE ONE:
+# CHOOSE A STRATEGY TO TEST:
 #my_strategy = random_action
 my_strategy = go_north
 #my_strategy = go_center
