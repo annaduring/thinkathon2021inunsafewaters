@@ -1,1 +1,1 @@
-from .boat_in_unknown_waters import BoatInUnknownWaters
+from .in_unsafe_waters import InUnsafeWaters

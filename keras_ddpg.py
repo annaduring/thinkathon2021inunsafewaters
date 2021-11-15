@@ -12,23 +12,23 @@ import matplotlib.pyplot as plt
 
 ### our env specifics:
     
-from challenge_do_not_modify import BoatInUnknownWaters
-problem = "BoatInUnknownWaters"
-env = BoatInUnknownWaters(n_steps=100, boundary="line")
+from challenge_do_not_modify import InUnsafeWaters
+problem = "InUnsafeWaters"
+env = InUnsafeWaters(n_steps=100, boundary="line")
 
 # CHOOSE A RANDOM SEED:
 #   interesting cases in (rough subjective) order of ascending difficulty: 
 #     for boundary=line: 7, 12, 37, 35, 23, 32
 #     for boundary=circle: 39, 21, 37, 10, 38, 20
-env.seed(7)
+env.seed(37)
 
 # choose whether to reuse same scenario (must be False in final evaluation!): 
 reuse_scenario = True
 
 # choose whether to use actual reward or use survival time instead (must be False in final evaluation!): 
 #reward_function = 'real'
-reward_function = 'survival time'
-#reward_function = 'squared time'
+#reward_function = 'survival time'
+reward_function = 'squared time'
 
 ###
 
@@ -232,7 +232,7 @@ actor_lr = 0.001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-total_episodes = 1000
+total_episodes = 10000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks

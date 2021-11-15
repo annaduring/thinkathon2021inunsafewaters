@@ -3,19 +3,19 @@ from time import time, sleep
 from progressbar import progressbar
 
 from gym.wrappers import RecordVideo
-from challenge_do_not_modify import BoatInUnknownWaters
+from challenge_do_not_modify import InUnsafeWaters
 
 # initialize environment:
 
 # CHOOSE A BOUNDARY GEOMETRY:
-env = BoatInUnknownWaters(n_steps=100, boundary='line')  # simpler
-#env = BoatInUnknownWaters(n_steps=100, boundary='circle')  # harder
+#env = InUnsafeWaters(n_steps=100, boundary='line')  # simpler
+env = InUnsafeWaters(n_steps=100, boundary='circle')  # harder
 
 # CHOOSE A RANDOM SEED:
 #   interesting cases in (rough subjective) order of ascending difficulty: 
 #     for boundary=line: 7, 12, 37, 35, 23, 32
 #     for boundary=circle: 39, 21, 37, 10, 38, 20
-env.seed(7)
+env.seed(39)
 
 parms = env.get_parameters()
 print("parameters:", parms)
@@ -45,8 +45,8 @@ def go_center(obs):
     
 # CHOOSE A STRATEGY TO TEST:
 #my_strategy = random_action
-my_strategy = go_north
-#my_strategy = go_center
+#my_strategy = go_north
+my_strategy = go_center
 
 
 print("\nVIDEO RECORDING ONE EPISODE...")

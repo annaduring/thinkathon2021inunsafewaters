@@ -64,7 +64,7 @@ def go_center_twice(xyphi0):
     rho = -np.sign(np.sin(phi-target_phi)) * rho_max * (np.abs(np.sin(phi-target_phi)) if np.cos(phi-target_phi) > 0 else 1)
     return np.array([m, rho])
 
-class BoatInUnknownWaters(core.Env):
+class InUnsafeWaters(core.Env):
     """
     
     **SUMMARY:**
@@ -154,6 +154,9 @@ class BoatInUnknownWaters(core.Env):
         "render.modes": ["human", "rgb_array"], 
         "video.frames_per_second": 5
     }
+    
+    _coeffs = None
+    state0 = None
 
     def get_parameters(self):
         return { 'm_max': m_max, 'rho_max': rho_max, 't_max': t_max }
@@ -172,7 +175,6 @@ class BoatInUnknownWaters(core.Env):
         self.observation_space = spaces.Box(
             low=np.array([-np.inf, -np.inf, -pi, -np.inf, -np.inf, -np.inf]), 
             high=np.array([np.inf, np.inf, pi, np.inf, np.inf, np.inf]), dtype=np.float64)
-        self._coeffs = np.zeros(21)
         self.state = self.state0 = self.history = self.viewer = None
         self.n_reset_coeffs = self._n_passive_succeeds = self._n_twice_fails = 0
         self.seed()
@@ -188,7 +190,7 @@ class BoatInUnknownWaters(core.Env):
         phase of the training process. For the final evaluation, the default
         of same=False must be used.
         """
-        if (not same) or (self._coeffs is None):
+        if (not same) or (self._coeffs is None) or (self.state0 is None):
             # find a random scenario that is neither trivial nor too hard:
             ts = np.linspace(0, t_max, self.n_steps+1)
             while True:
@@ -249,8 +251,12 @@ class BoatInUnknownWaters(core.Env):
     def step(self, action):
         assert not self.terminal, "no steps beyond termination allowed"
         m, rho = action
-        assert 0 <= m <= m_max, "m must be between 0 and "+str(m_max)
-        assert abs(rho) <= rho_max, "abs(rho) can be at most "+str(rho_max)
+        if not (0 <= m <= m_max):
+            m = max(0, min(m, m_max))
+            print("WARNING: m must be between 0 and "+str(m_max)+" and was replaced by "+str(m))
+        if not (abs(rho) <= rho_max):
+            rho = max(-rho_max, min(rho, rho_max))
+            print("WARNING: rho must be between +- "+str(rho_max)+ " and was replaced by "+str(rho))
         self.action = np.array(action)
         # integrate dynamics for dt time units:
         dt = t_max / self.n_steps

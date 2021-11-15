@@ -1,1 +1,1 @@
-from .envs import BoatInUnknownWaters
+from .envs import InUnsafeWaters
