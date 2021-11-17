@@ -15,7 +15,7 @@ env = InUnsafeWaters(n_steps=100, boundary='circle')  # harder
 #   interesting cases in (rough subjective) order of ascending difficulty: 
 #     for boundary=line: 7, 12, 37, 35, 23, 32
 #     for boundary=circle: 39, 21, 37, 10, 38, 20
-env.seed(39)
+env.seed(10)
 
 parms = env.get_parameters()
 print("parameters:", parms)
@@ -27,26 +27,19 @@ def random_action(obs):
     m = env.np_random.uniform(0, parms['m_max'])
     rho = env.np_random.uniform(-parms['rho_max'], parms['rho_max'])
     return [m, rho]   
-def go_north(obs):
-    # turn boat until facing rather "up" (=north) than "down" (south), 
-    # then begin pushing forward and turn it further until facing straight "up"
-    x, y, phi, dx_dt, dy_dt, dphi_dt = obs
+def straight_away(obs):
+    # turn boat until facing rather "away" than "towards" boundary, 
+    # then begin pushing forward and turn it further until facing straight away from boundary
+    x, y, sinphi, cosphi, D, sintheta, costheta, dx, dy, dsinphi, dcosphi, dD, dsintheta, dcostheta, fx, fy, dxfx, dyfx, dxfy, dyfy = obs
+    # so we want theta = pi, i.e. cos(theta) = -1 and sin(theta) = 0:
     m = parms['m_max']
-    rho = -np.sign(np.sin(phi)) * parms['rho_max'] * (np.abs(np.sin(phi)) if np.cos(phi) > 0 else 1)
+    rho = -np.sign(sintheta) * parms['rho_max'] * (np.abs(sintheta) if costheta < 0 else 1)
     return [m, rho]
-def go_center(obs):
-    # turn boat until facing rather "inwards" (=to the center) than "outwards", 
-    # then begin pushing forward and turn it further until facing straigth to the center
-    x, y, phi, dx_dt, dy_dt, dphi_dt = obs
-    m = parms['m_max']
-    target_phi = np.arctan2(x,y) + np.pi
-    rho = -np.sign(np.sin(phi-target_phi)) * parms['rho_max'] * (np.abs(np.sin(phi-target_phi)) if np.cos(phi-target_phi) > 0 else 1)
-    return [m, rho]
+    
     
 # CHOOSE A STRATEGY TO TEST:
 #my_strategy = random_action
-#my_strategy = go_north
-my_strategy = go_center
+my_strategy = straight_away
 
 
 print("\nVIDEO RECORDING ONE EPISODE...")

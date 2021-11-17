@@ -20,7 +20,7 @@ env = InUnsafeWaters(n_steps=100, boundary="line")
 #   interesting cases in (rough subjective) order of ascending difficulty: 
 #     for boundary=line: 7, 12, 37, 35, 23, 32
 #     for boundary=circle: 39, 21, 37, 10, 38, 20
-env.seed(37)
+env.seed(35)
 
 # choose whether to reuse same scenario (must be False in final evaluation!): 
 reuse_scenario = True
@@ -232,7 +232,7 @@ actor_lr = 0.001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-total_episodes = 10000
+total_episodes = 1000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
@@ -259,6 +259,8 @@ for ep in range(total_episodes):
         # env.render()
 
         tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+        if any(np.isnan(prev_state)):
+            print("WARNING, state contains nan values:", prev_state)
 
         action = policy(tf_prev_state, ou_noise)
         # Recieve state and reward from environment.

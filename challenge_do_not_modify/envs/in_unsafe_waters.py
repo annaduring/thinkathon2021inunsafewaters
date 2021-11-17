@@ -8,6 +8,9 @@ from gym import core, spaces
 from gym.utils import seeding
 
 
+# TODO: add ellipse, triangle, rectangle, ell
+
+
 # PARAMETERS:
 
 rho_max = pi/2  # = +- 90°
@@ -28,17 +31,37 @@ initial_radius = 3  # range of initial positions
 
 # DYNAMICS:
     
-@njit
-def dxyphi(xyphi, t, coeffs, action, strategy=None):
+@njit 
+def fxfy(x, y, coeffs):
     # extract parameters:
     yoff, a00, a10, a01, a11, a20, a02, b00, b10, b01, b11, b20, b02, a30, a21, a12, a03, b30, b21, b12, b03 = coeffs
+    y -= yoff
+    fx = a00 + a10*x + a01*y + a11*x*y + a20*x**2 + a02*y**2 + a30*x**3 + a21*x**2*y + a12*x*y**2 + a03*y**3 - c*x*(x**2 + y**2)**1.5 
+    fy = b00 + b10*x + b01*y + b11*x*y + b20*x**2 + b02*y**2 + b30*x**3 + b21*x**2*y + b12*x*y**2 + b03*y**3 - c*y*(x**2 + y**2)**1.5
+    return fx, fy
+
+@njit
+def jacobian(x, y, coeffs):
+    # extract parameters:
+    yoff, a00, a10, a01, a11, a20, a02, b00, b10, b01, b11, b20, b02, a30, a21, a12, a03, b30, b21, b12, b03 = coeffs
+    y -= yoff
+    dxfx = a10 + a11*y + 2*a20*x + 3*a30*x**2 + 2*a21*x*y +   a12*y**2 - c*x * 1.5*(x**2 + y**2)**0.5 * 2*x - c * (x**2 + y**2)**1.5 
+    dyfx = a01 + a11*x + 2*a02*y +   a21*x**2 + 2*a12*x*y + 3*a03*y**2 - c*x * 1.5*(x**2 + y**2)**0.5 * 2*y 
+    dxfy = b10 + b11*y + 2*b20*x + 3*b30*x**2 + 2*b21*x*y +   b12*y**2 - c*y * 1.5*(x**2 + y**2)**0.5 * 2*x
+    dyfy = b01 + b11*x + 2*b02*y +   b21*x**2 + 2*b12*x*y + 3*b03*y**2 - c*y * 1.5*(x**2 + y**2)**0.5 * 2*y - c * (x**2 + y**2)**1.5
+    return dxfx, dyfx, dxfy, dyfy
+    
+@njit
+def dxyphi(xyphi, unused_t, coeffs, action, strategy=None):
     # extract state:
     x,y,phi = xyphi  
+    # get field:
+    fx, fy = fxfy(x, y, coeffs)
+    
     # extract action:
     if strategy is not None:
         action = strategy(xyphi)
     m, rho = action
-    
     # motor force component parallel to the orientation of the boat moves the boat forward:
     forward_velocity = m * cos(rho)
     # motor force component perpendicular to the orientation of the boat turns the boat:
@@ -46,12 +69,9 @@ def dxyphi(xyphi, t, coeffs, action, strategy=None):
     angular_velocity = turning_velocity / radius
 
     # derivatives:
-    y -= yoff
     return [
-        a00 + a10*x + a01*y + a11*x*y + a20*x**2 + a02*y**2 + a30*x**3 + a21*x**2*y + a12*x*y**2 + a03*y**3
-            - c*x*(x**2 + y**2)**1.5 + forward_velocity * sin(phi),  # dx/dt
-        b00 + b10*x + b01*y + b11*x*y + b20*x**2 + b02*y**2 + b30*x**3 + b21*x**2*y + b12*x*y**2 + b03*y**3
-            - c*y*(x**2 + y**2)**1.5 + forward_velocity * cos(phi),  # dy/dt
+        fx + forward_velocity * sin(phi),  # dx/dt
+        fy + forward_velocity * cos(phi),  # dy/dt
         angular_velocity  # dphi/dt
         ]
 
@@ -86,9 +106,7 @@ class InUnsafeWaters(core.Env):
     **STATE:**
     
     (x, y, phi) where 
-        x, y are the coordinates of the boat's position:
-            y>=0: the boat has not fallen off the cliff
-            y<0: the boat has fallen off the cliff
+        x, y are the coordinates of the boat's position.
         phi is the angle of the ship's orientation:
             phi=0: boat points towards positive y ("up" in the visualisation)
             phi=pi/2: towards positive x ("right")
@@ -120,9 +138,34 @@ class InUnsafeWaters(core.Env):
     
     **OBSERVATION:**
 
-    (x, y, phi, dx/dt, dy/dt, dphi/dt) where
-        (x, y, phi) is the current state (see above) and
-        (dx/dt, dy/dt, dphi/dt) is its current time derivative given the last action 
+    The learner is given an array with the following entries as observation:
+        0: x,
+        1: y: boat position
+        2: sin(phi), 
+        3: cos(phi): sine and cosine of boat orientation angle
+        4: D: distance to boundary
+        5: sin(theta), 
+        6: cos(theta): sine and cosine of direction to boundary relative to boat orientation
+        7: dx/dt, 
+        8: dy/dt, 
+        9: dsin(phi)/dt, 
+        10: dcos(phi)/dt, 
+        11: dD/dt, 
+        12: dsin(theta)/dt, 
+        13: dcos(theta)/dt: time derivatives of all the above quantities, given the current action
+        14: fx,
+        15: fy: flow components at current position
+        16: dfx/x,
+        17: dfx/y,
+        18: dfy/x,
+        19: dfy/y: spatial derivative of flow (=Jacobian matrix of flow field)
+        
+    In this, theta=0 means the boundary is straight ahead of the boat, 
+    theta=pi/2 means it is to the right of the boat,
+    theta=-pi/2 means it is to the left of the boat,
+    theta=pi means it is behind the boat.
+        
+    Angles are given as sine and cosine since otherwise the learner might get confused if the angle crosses 2pi.
 
     
     **TERMINATION:**
@@ -173,8 +216,50 @@ class InUnsafeWaters(core.Env):
         # agent observes the sixtuple 
         # [position x, position y, orientation angle phi, dx/dt, dy/dt, dphi/dt]:
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf, -np.inf, -pi, -np.inf, -np.inf, -np.inf]), 
-            high=np.array([np.inf, np.inf, pi, np.inf, np.inf, np.inf]), dtype=np.float64)
+            low=np.array([
+            -np.inf, 
+            -np.inf, 
+            -1,
+            -1,
+            0, 
+            -1,
+            -1,
+            -np.inf, 
+            -np.inf, 
+            -np.inf, 
+            -np.inf,
+            -np.inf, 
+            -np.inf, 
+            -np.inf, 
+            -np.inf, 
+            -np.inf, 
+            -np.inf,
+            -np.inf, 
+            -np.inf, 
+            -np.inf, 
+            ]), 
+            high=np.array([
+            np.inf, 
+            np.inf, 
+            1,
+            1,
+            np.inf, 
+            1,
+            1,
+            np.inf, 
+            np.inf, 
+            np.inf, 
+            np.inf,
+            np.inf, 
+            np.inf, 
+            np.inf, 
+            np.inf, 
+            np.inf, 
+            np.inf,
+            np.inf, 
+            np.inf, 
+            np.inf, 
+            ]), dtype=np.float64)
         self.state = self.state0 = self.history = self.viewer = None
         self.n_reset_coeffs = self._n_passive_succeeds = self._n_twice_fails = 0
         self.seed()
@@ -252,15 +337,19 @@ class InUnsafeWaters(core.Env):
         assert not self.terminal, "no steps beyond termination allowed"
         m, rho = action
         if not (0 <= m <= m_max):
+            mold = m
             m = max(0, min(m, m_max))
-            print("WARNING: m must be between 0 and "+str(m_max)+" and was replaced by "+str(m))
-        if not (abs(rho) <= rho_max):
+            print("WARNING: m must be between 0 and "+str(m_max)+", so "+str(mold)+" was replaced by "+str(m))
+        if not (-rho_max <= rho <= rho_max):
+            rhoold = rho
             rho = max(-rho_max, min(rho, rho_max))
-            print("WARNING: rho must be between +- "+str(rho_max)+ " and was replaced by "+str(rho))
+            print("WARNING: rho must be between +- "+str(rho_max)+ ", so "+str(rhoold)+" was replaced by "+str(rho))
         self.action = np.array(action)
         # integrate dynamics for dt time units:
         dt = t_max / self.n_steps
         new_state = odeint(dxyphi, self.state, [0, dt], (self._coeffs, self.action))[-1,:]
+        new_state[0] = max(-1e9, min(new_state[0], 1e9))  # avoids nans
+        new_state[1] = max(-1e9, min(new_state[1], 1e9))
         new_state[2] = wrap(new_state[2], -pi, pi)
         self.t += dt
         x,y,phi = self.state = new_state
@@ -306,6 +395,10 @@ class InUnsafeWaters(core.Env):
         x,y,phi = self.state
         m,rho = self.action
         
+        # draw link to closest boundary point:
+        li = self.viewer.draw_line([(x+self._bx)/2, (y+self._by)/2], [self._bx, self._by])
+        li.set_color(1.0, 0.3, 0.3)
+
         # draw boat:
         dx = radius * sin(phi)
         dy = radius * cos(phi)
@@ -313,7 +406,6 @@ class InUnsafeWaters(core.Env):
                                       [x-dx, y-dy], 
                                       [x-dy/5, y+dx/5], 
                                       [x+dx, y+dy]])
-#        b.add_attr(rendering.LineWidth(stroke=0.1))  # does not seem to have any effect
         b.set_color(0, 0, 0)
         # draw boat's center of gravity:
         c = self.viewer.draw_circle(radius=0.15)
@@ -329,9 +421,8 @@ class InUnsafeWaters(core.Env):
         mo = self.viewer.draw_polygon([[x-dx-dx2/2+dy2/3, y-dy-dy2/2-dx2/3], 
                                        [x-dx-dx2/2-dy2/3, y-dy-dy2/2+dx2/3], 
                                        [x-dx+dx2/2, y-dy+dy2/2]])
-#        mo.add_attr(rendering.LineWidth(stroke=0.2))  # does not seem to have any effect
         mo.set_color(1, 1, 0)
-
+        
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 
     def close(self):
@@ -349,8 +440,56 @@ class InUnsafeWaters(core.Env):
         self.reward = 1.0 if self.terminal and not died else 0.0
         
     def _make_obs(self):
-        # agents can observe the full state and its time derivative, but not the parameters:
-        self.obs = np.concatenate((self.state, dxyphi(self.state, self.t, self._coeffs, self.action)))
+        # agents can observe the full state, the distance from the boundary,
+        # and all these quantities' time derivatives, the current flow and its
+        # Jacobian, but cannot observe the full flow parameters:
+        x,y,phi = s = self.state
+        dx,dy,dphi = ds = dxyphi(self.state, self.t, self._coeffs, self.action)
+        # transform angle:
+        sinphi = np.sin(phi)
+        cosphi = np.cos(phi)
+        dsinphi = cosphi * dphi
+        dcosphi = -sinphi * dphi
+        # find closest point bx,by on boundary and its time derivative dbx,dby:
+        if self.boundary == 'line':
+            bx = x
+            by = 0
+            dbx = dx
+            dby = 0
+        elif self.boundary == 'circle':
+            R = np.sqrt(x**2 + y**2)  # distance from origin
+            dR = (x*dx + y*dy) / R
+            fac = boundary_radius / R
+            dfac = - boundary_radius * dR / R**2
+            bx = x * fac
+            by = y * fac
+            dbx = dx * fac + x * dfac
+            dby = dy * fac + y * dfac
+        # compute distance to boundary D and its time derivative dD:
+        relx = bx - x
+        rely = by - y
+        drelx = dbx - dx
+        drely = dby - dy
+        D = np.sqrt(relx**2 + rely**2)
+        dD = (relx*drelx + rely*drely) / D
+        # compute relative angle to boundary theta and its time derivative:
+        psi = np.arctan2(relx, rely)
+        dpsi = (drelx*rely - relx*drely) / (rely**2 + relx**2)
+        theta = psi - phi
+        dtheta = dpsi - dphi
+        sintheta = np.sin(theta)
+        costheta = np.cos(theta)
+        dsintheta = costheta * dtheta
+        dcostheta = -sintheta * dtheta
+        # field:
+        fx, fy = fxfy(x, y, self._coeffs)
+        dxfx, dyfx, dxfy, dyfy = jacobian(x, y, self._coeffs) 
+        # store observation:
+        self.obs = np.array([x, y, sinphi, cosphi, D, sintheta, costheta,
+                            dx,dy,dsinphi,dcosphi,dD,dsintheta,dcostheta,
+                            fx, fy, dxfx, dyfx, dxfy, dyfy])
+        # store aux. data for rendering:
+        self._bx, self._by = bx, by
 
     def _remember(self):
         self.history.append({
