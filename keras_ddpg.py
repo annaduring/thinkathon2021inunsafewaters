@@ -30,6 +30,21 @@ reuse_scenario = True
 #reward_function = 'survival time'
 reward_function = 'squared time'
 
+
+# learner parameters:
+    
+total_episodes = 10000  # JH: changed from 1000
+std_dev = 0.2  # JH: changed from 0.2
+# Discount factor for future rewards
+gamma = 0.99
+
+# Learning rate for actor-critic models:
+critic_lr = 0.002
+actor_lr = 0.001
+
+# Used to update target networks:
+tau = 0.005
+
 ###
 
 
@@ -212,7 +227,6 @@ def policy(state, noise_object):
     return np.squeeze(legal_action)  # JH: removed square brackets
 
 
-std_dev = 0.4  # JH: changed from 0.2
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = get_actor()
@@ -225,18 +239,8 @@ target_critic = get_critic()
 target_actor.set_weights(actor_model.get_weights())
 target_critic.set_weights(critic_model.get_weights())
 
-# Learning rate for actor-critic models
-critic_lr = 0.002
-actor_lr = 0.001
-
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
-
-total_episodes = 1000
-# Discount factor for future rewards
-gamma = 0.99
-# Used to update target networks
-tau = 0.005
 
 buffer = Buffer(50000, 64)
 

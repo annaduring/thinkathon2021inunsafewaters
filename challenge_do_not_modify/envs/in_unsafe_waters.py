@@ -191,6 +191,16 @@ class InUnsafeWaters(core.Env):
     Another auxiliary reward function could be based on the distance to the cliff
     and give a reward of y in each step.
     
+    
+    **RENDERING:**
+    
+    The boat is shown in black, its exact position marked in white.
+    The motor angle is represented by the direction of the yellow triangle,
+    its speed by the triangle's size.
+    The boundary is between the blue (allowed) and red (forbidden) region.
+    The point on the boundary closest to the boat is marked with a red line.
+    The (unobserved!) flow is indicated by dark blue arrows.
+    
     """
 
     metadata = {
