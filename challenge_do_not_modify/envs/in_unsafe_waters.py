@@ -1,4 +1,7 @@
 """main challenge: navigate a boat in unknown waters so that it does not fall of a cliff for as long as possible"""
+
+# DO NOT CHANGE!
+
 import numpy as np
 from numpy import abs, sin, cos, pi
 from scipy.integrate import odeint 
@@ -8,14 +11,11 @@ from gym import core, spaces
 from gym.utils import seeding
 
 
-# TODO: add ellipse, triangle, rectangle, ell
-
-
 # PARAMETERS:
 
 rho_max = pi/2  # = +- 90°
 m_max = 5
-t_max = 3
+t_max = 3  # task: survive until this time!
 
 radius = 1  # distance between boat's center of gravity and its motor 
 c = 0.1  # dampening coefficient for dynamics

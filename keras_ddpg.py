@@ -8,35 +8,45 @@ import tensorflow as tf
 from tensorflow.keras import layers
 import numpy as np
 import matplotlib.pyplot as plt
-
+from time import sleep
 
 ### our env specifics:
     
-from challenge_do_not_modify import InUnsafeWaters
+from challenge_do_not_modify import InUnsafeWaters, evaluate
+
 problem = "InUnsafeWaters"
-env = InUnsafeWaters(n_steps=100, boundary="line")
+#env = InUnsafeWaters(n_steps=100, boundary="line")
+env = InUnsafeWaters(n_steps=100, boundary="circle")
 
 # CHOOSE A RANDOM SEED:
 #   interesting cases in (rough subjective) order of ascending difficulty: 
 #     for boundary=line: 7, 12, 37, 35, 23, 32
 #     for boundary=circle: 39, 21, 37, 10, 38, 20
-env.seed(35)
+env.seed(21)
 
-# choose whether to reuse same scenario (must be False in final evaluation!): 
+# choose whether to reuse th same scenario (flow):
+# (must be false in the final evaluation!): 
 reuse_scenario = True
 
-# choose whether to use actual reward or use survival time instead (must be False in final evaluation!): 
+# choose whether to use the real reward function (=survival yes or no, as used in final evaluation)
+# or use survival time or squared survival time instead (may help in learning): 
 #reward_function = 'real'
 #reward_function = 'survival time'
 reward_function = 'squared time'
 
+# optionally weigh down some observation items:
+#obs_weights = np.ones(20)  # use all parts of the observation
+obs_weights = np.array([0,0,0,0, 1, 1,1, 0,0,0,0, 1, 1,1, 0,0,0,0,0,0])  # use D, theta and their derivs
+#obs_weights = np.array([0,0,0,0, 0, 1,1, 0,0,0,0, 0, 0,0, 0,0,0,0,0,0])  # use only theta, as in "straight_away" strategy
+
 
 # learner parameters:
     
-total_episodes = 10000  # JH: changed from 1000
-std_dev = 0.2  # JH: changed from 0.2
-# Discount factor for future rewards
-gamma = 0.99
+total_episodes = 10000  # JH: original: 1000
+std_dev = 0.2  # JH: original: 0.2
+
+# Discount factor for future rewards:
+gamma = 0.99  # JH: maybe set to 1?
 
 # Learning rate for actor-critic models:
 critic_lr = 0.002
@@ -267,16 +277,20 @@ for ep in range(total_episodes):
             print("WARNING, state contains nan values:", prev_state)
 
         action = policy(tf_prev_state, ou_noise)
-        # Recieve state and reward from environment.
+        # Receive state and reward from environment.
         state, reward, done, info = env.step(action)
+        # JH: optionally suppress or reweight part of the state:
+        state *= obs_weights
         
         # JH: optionally use an auxiliary reward function instead:
         if reward_function == 'real':
             pass  # use the real rewards
         elif reward_function == 'survival time':
-            reward = 1.0 if not done else 0.0
+            reward = 3.0 / env.n_steps if not done else 0.0  
+            # this gives 3.0 if surviving all of the n_steps many steps between time 0 and time 3 
         elif reward_function == 'squared time':
-            reward = 1.0*step if not done else 0.0
+            reward = 18.0 * step / env.n_steps**2 if not done else 0.0
+            # this gives 9.0 if surviving all of the n_steps many steps between time 0 and time 3 
             step += 1
         else:
             raise Exception('unknown reward function')
@@ -317,26 +331,17 @@ target_critic.save_weights("/tmp/target_critic.h5")
 
 
 # JH: finally evaluate trained actor on actual reward function and show one run:
-# (code similar to example.py):
-    
-from time import sleep
-from progressbar import progressbar
-n_episodes = 100
-print("\EVALUATING TRAINED ACTOR ON", n_episodes, "EPISODES...")
+
 no_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(0.0) * np.ones(1))
 
-n_success = 0
-for episode in progressbar(range(n_episodes)):
-    obs = env.reset(same=reuse_scenario)
-    while True:
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
-        action = policy(tf_prev_state, no_noise)
-        obs, reward, terminated, info = res = env.step(action)
-        if terminated: 
-            break
-    n_success += reward
-rate = n_success / n_episodes
-print("success rate", rate, "+-", np.sqrt(rate*(1-rate)/n_episodes))
+def my_policy(obs):
+    tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs), 0)
+    return policy(tf_prev_state, no_noise)
+
+# THIS IS THE LINE YOU NEED TO CALL BEFORE SUBMITTING YOUR SOLUTION AS WELL
+# (with the seed value we tell you on Sunday morning):
+rate = evaluate(my_policy, n_steps=100, seed=1)
+# Then send us the output.
 
 obs = env.reset(same=reuse_scenario)
 while True:
