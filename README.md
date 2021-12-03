@@ -1,4 +1,4 @@
-# thinkathlon2021navigate
+# thinkathon2021inunsafewaters
 
 To get started, look at:
 
