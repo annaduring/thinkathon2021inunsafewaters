@@ -22,7 +22,7 @@ env = InUnsafeWaters(n_steps=100, boundary="circle")
 #   interesting cases in (rough subjective) order of ascending difficulty: 
 #     for boundary=line: 7, 12, 37, 35, 23, 32
 #     for boundary=circle: 39, 21, 37, 10, 38, 20
-env.seed(21)
+env.seed(37)
 
 # choose whether to reuse th same scenario (flow):
 # (must be false in the final evaluation!): 
@@ -31,18 +31,18 @@ reuse_scenario = True
 # choose whether to use the real reward function (=survival yes or no, as used in final evaluation)
 # or use survival time or squared survival time instead (may help in learning): 
 #reward_function = 'real'
-#reward_function = 'survival time'
-reward_function = 'squared time'
+#reward_function = 'squared time'
+reward_function = 'survival time'
 
 # optionally weigh down some observation items:
-#obs_weights = np.ones(20)  # use all parts of the observation
-obs_weights = np.array([0,0,0,0, 1, 1,1, 0,0,0,0, 1, 1,1, 0,0,0,0,0,0])  # use D, theta and their derivs
+obs_weights = np.ones(20)  # use all parts of the observation
+#obs_weights = np.array([0,0,0,0, 1, 1,1, 0,0,0,0, 1, 1,1, 0,0,0,0,0,0])  # use D, theta and their derivs
 #obs_weights = np.array([0,0,0,0, 0, 1,1, 0,0,0,0, 0, 0,0, 0,0,0,0,0,0])  # use only theta, as in "straight_away" strategy
 
 
 # learner parameters:
     
-total_episodes = 10000  # JH: original: 1000
+total_episodes = 500  # JH: original: 1000
 std_dev = 0.2  # JH: original: 0.2
 
 # Discount factor for future rewards:
@@ -71,7 +71,7 @@ print("Min Value of Action ->  {}".format(lower_bound))
 
 
 class OUActionNoise:
-    def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
+    def __init__(self, mean, std_deviation, theta=0.00, dt=1e-2, x_initial=None):
         self.theta = theta
         self.mean = mean
         self.std_dev = std_deviation
@@ -189,7 +189,7 @@ def update_target(target_weights, weights, tau):
 
 def get_actor():
     # Initialize weights between -3e-3 and 3-e3
-    last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
+    last_init = tf.random_uniform_initializer( minval=-0.003, maxval=0.003)
 
     inputs = layers.Input(shape=(num_states,))
     out = layers.Dense(256, activation="relu")(inputs)
@@ -244,6 +244,7 @@ critic_model = get_critic()
 
 target_actor = get_actor()
 target_critic = get_critic()
+
 
 # Making the weights equal initially
 target_actor.set_weights(actor_model.get_weights())
