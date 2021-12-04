@@ -9,8 +9,8 @@ from challenge_do_not_modify import InUnsafeWaters, evaluate
 # initialize environment:
 
 # CHOOSE A BOUNDARY GEOMETRY:
-#env = InUnsafeWaters(n_steps=100, boundary='line')  # simpler
-env = InUnsafeWaters(n_steps=100, boundary='circle')  # harder
+env = InUnsafeWaters(n_steps=100, boundary='line')  # simpler
+#env = InUnsafeWaters(n_steps=10000, boundary='circle')  # harder
 
 # CHOOSE A RANDOM SEED:
 #   interesting cases in (rough subjective) order of ascending difficulty: 
@@ -20,6 +20,7 @@ env.seed(10)
 
 parms = env.get_parameters()
 print("parameters:", parms)
+
 
 
 # some simple policies:
